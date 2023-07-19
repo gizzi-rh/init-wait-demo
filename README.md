@@ -43,5 +43,5 @@ oc process init-wait-demo-template -n openshift | oc apply -f -
 
 
 # Reference
-[1] https://kubernetes.io/docs/concepts/overview/kubernetes-api/
-[2] https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/
+1. https://kubernetes.io/docs/concepts/overview/kubernetes-api/
+2. https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/
