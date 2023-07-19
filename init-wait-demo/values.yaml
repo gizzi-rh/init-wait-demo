@@ -1,0 +1,180 @@
+# Default values for init-wait-demo.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+ds:
+  name: dependency-daemon
+  containerName: dependency
+  image:
+    repository: image-registry.openshift-image-registry.svc:5000/openshift/httpd 
+    pullPolicy: Always
+    tag: "latest"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      cpu: 100m
+      memory: 200Mi
+
+  livenessProbe:
+    enabled: true
+    tcpSocket:
+      port: 8080
+    failureThreshold: 3
+    successThreshold: 1
+    timeoutSeconds: 10
+    periodSeconds: 15
+
+  readinessProbe:
+    enabled: true
+    tcpSocket:
+      port: 8080
+    failureThreshold: 3
+    successThreshold: 1
+    timeoutSeconds: 10
+    periodSeconds: 15
+
+  startupProbe:
+    enabled: true
+    tcpSocket:
+      port: 8080
+    initialDelaySeconds: 15
+    failureThreshold: 3
+    successThreshold: 1
+    timeoutSeconds: 10
+    periodSeconds: 15
+  
+  selector:
+    label: dependency-daemon
+
+  imagePullSecrets: []
+
+webApp:
+  initContainers:
+    - image: 
+        repository: quay.io/rhn-support-gizzi/init-alpine
+        pullPolicy: Always
+        tag: "1.0"
+      name: init
+      command: 
+        - "sh"
+        - "-c" 
+        - "cp /init-config/init-entrypoint.sh /app/init-entrypoint.sh && chmod +x /app/init-entrypoint.sh && (timeout 1m ./app/init-entrypoint.sh || exit 0)"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 50Mi
+        limits:
+          cpu: 50m
+          memory: 50Mi
+      environment: 
+        - name: NODE
+          fieldRef: spec.nodeName
+        - name: MON_APP
+          configmap: init-wait-demo-cm
+          key: MON-APP
+        - name: MON_CONTAINER
+          configmap: init-wait-demo-cm
+          key: MON-CONTAINER
+        - name: MON_NS
+          configmap: init-wait-demo-cm
+          key: MON-NS
+      volumeMounts:
+        - name: init-config-vol
+          mountPath: /init-config/init-entrypoint.sh
+          subPath: init-entrypoint.sh
+
+  replicaCount: 3
+
+  autoscaling:
+    enabled: false
+
+  name: web-app
+
+  containerName: web-app
+  
+  image:
+    repository: image-registry.openshift-image-registry.svc:5000/openshift/httpd 
+    pullPolicy: Always
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "latest"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      cpu: 100m
+      memory: 200Mi
+
+  livenessProbe:
+    enabled: false
+
+  readinessProbe:
+    enabled: false
+
+  startupProbe:
+    enabled: false
+
+  serviceAccount:
+    create: true 
+    annotations:  {}
+    name: "api-server-viewer"
+
+  service:
+    type: ClusterIP
+
+  ports:
+    - port: 80 #service
+      targetPort: 8080 #container
+      protocol: TCP
+      name: http
+
+  imagePullSecrets: []
+
+  volumes:
+    - name: init-config-vol
+      configMap:
+        name: init-wait-demo-cm
+
+
+rb:
+  name: view
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: view
+  subjects:
+    - kind: ServiceAccount
+      name: api-server-viewer
+
+initConfig:
+  name: init-wait-demo-cm
+  monitoringApp: dependency-daemon
+  monitoringContainer: dependency
+  monitoringNamespace: init-wait-demo
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

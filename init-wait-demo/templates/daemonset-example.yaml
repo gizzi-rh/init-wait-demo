@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ .Values.ds.name }}
+  labels:
+    {{- include "init-wait-demo.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ .Values.ds.selector.label }}
+  template:
+    metadata:
+      labels:
+        name: {{ .Values.ds.selector.label }}
+    spec:
+      containers:
+      - name: {{ .Values.ds.containerName }}
+        image: "{{ .Values.ds.image.repository }}:{{ .Values.ds.image.tag }}"
+        imagePullPolicy: {{ .Values.ds.image.pullPolicy }}
+        resources:
+          {{- toYaml .Values.ds.resources | nindent 10 }}
+        {{- if .Values.ds.livenessProbe.enabled }}
+        livenessProbe:
+          {{- omit .Values.ds.livenessProbe "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        {{- if .Values.ds.readinessProbe.enabled }}
+        readinessProbe:
+          {{- omit .Values.ds.readinessProbe "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        {{- if .Values.ds.startupProbe.enabled }}
+        startupProbe:
+        {{- omit .Values.ds.startupProbe "enabled" | toYaml | nindent 10 }}
+        {{- end }}

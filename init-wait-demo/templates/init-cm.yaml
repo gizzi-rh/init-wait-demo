@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.initConfig.name }}
+data:
+  MON-APP: {{ .Values.initConfig.monitoringApp | quote }}
+  MON-CONTAINER: {{ .Values.initConfig.monitoringContainer | quote }}
+  MON-NS: {{ .Values.initConfig.monitoringNamespace | quote }}
+  init-entrypoint.sh: |-
+{{ .Files.Get "files/init-entrypoint.sh" | indent 4 }}

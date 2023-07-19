@@ -1,0 +1,218 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: init-wait-demo-template
+  annotations:
+    description: "Wait demo: An httpd container wait X minutes the master-daemonset to become ready"
+objects:
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: ${NAMESPACE}
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: api-server-viewer
+      namespace: ${NAMESPACE}
+      labels:
+        app: init-wait-demo
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: view
+      namespace: ${NAMESPACE}
+      labels:
+        app: init-wait-demo
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: view
+    subjects:
+    - kind: ServiceAccount
+      name: api-server-viewer
+      namespace: ${NAMESPACE}
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: init-wait-demo-cm
+      namespace: ${NAMESPACE}
+      labels:
+        app: init-wait-demo
+    data:
+      MON-APP: ${MON_APP}
+      MON-CONTAINER: ${MON_CONTAINER}
+      MON-NS: ${NAMESPACE}
+      init-entrypoint.sh: |
+        #!/bin/sh
+
+        APISERVER=https://kubernetes.default.svc.cluster.local
+        SERVICEACCOUNT=/var/run/secrets/kubernetes.io/serviceaccount
+        TOKEN=$(cat ${SERVICEACCOUNT}/token)
+        CACERT=${SERVICEACCOUNT}/ca.crt
+
+        echo "Checking ${MON_APP} pod in ${MON_NS} namespace on ${NODE} node"
+
+        while true
+        do
+          echo "Querying API server..."
+          echo ""
+
+          responseJson=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET ${APISERVER}/api/v1/namespaces/${MON_NS}/pods)
+          
+          podJson=$(echo ${responseJson} | jq --arg NODE "$NODE" --arg MON_APP "$MON_APP" '.items[] | select ( .spec.nodeName | contains($NODE)) | select ( .metadata.name | contains($MON_APP))')
+          echo "Pod extracted:"
+          echo "${podJson}"
+          echo ""
+
+          containerStatus=$(echo ${responseJson} | jq --arg NODE "$NODE" --arg MON_APP "$MON_APP" --arg MON_CONTAINER "$MON_CONTAINER"  '.items[] | select ( .spec.nodeName | contains($NODE)) | select ( .metadata.name | contains($MON_APP)) | .status.containerStatuses[] | select ( .name==$MON_CONTAINER ) | .ready')
+          echo "Container status: ${containerStatus}"
+          echo ""
+
+          if [ "$containerStatus" == "true" ]
+          then
+            echo "Container ${MON_CONTAINER} is ready"
+            echo "Exiting..."
+            exit 0
+          fi
+
+          sleep 5
+
+        done 
+  - apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+      name: dependency-daemon
+      namespace: ${NAMESPACE}
+      labels:
+        app: init-wait-demo
+    spec:
+      selector:
+        matchLabels:
+          name: dependency-daemon
+      template:
+        metadata:
+          labels:
+            name: dependency-daemon
+        spec:
+          containers:
+          - name: dependency
+            image: image-registry.openshift-image-registry.svc:5000/openshift/httpd:latest
+            resources:
+              limits:
+                memory: 200Mi
+              requests:
+                cpu: 50m
+                memory: 100Mi
+            livenessProbe:
+              tcpSocket:
+                port: 8080
+              failureThreshold: 3
+              successThreshold: 1
+              timeoutSeconds: 10
+              periodSeconds: 15
+            readinessProbe:
+              tcpSocket:
+                port: 8080
+              failureThreshold: 3
+              successThreshold: 1
+              timeoutSeconds: 10
+              periodSeconds: 15
+            startupProbe:
+              tcpSocket:
+                port: 8080
+              initialDelaySeconds: 15
+              failureThreshold: 3
+              successThreshold: 1
+              timeoutSeconds: 10
+              periodSeconds: 15
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: init-wait-demo
+      name: web-app
+      namespace: ${NAMESPACE}
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          deployment: web-app
+      template:
+        metadata:
+          labels:
+            deployment: web-app
+        spec:
+          serviceAccount: api-server-viewer
+          serviceAccountName: api-server-viewer
+          initContainers:
+          - image: quay.io/rhn-support-gizzi/init-alpine:1.0
+            imagePullPolicy: Always
+            name: init
+            command: ["sh", "-c", "cp /init-config/init-entrypoint.sh /app/init-entrypoint.sh && chmod +x /app/init-entrypoint.sh && (timeout ${WAIT_TIMEOUT}m ./app/init-entrypoint.sh || exit 0)"]
+            env: 
+              - name: NODE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              - name: MON_APP
+                valueFrom:
+                  configMapKeyRef:
+                    name: init-wait-demo-cm
+                    key: MON-APP
+              - name: MON_CONTAINER
+                valueFrom:
+                  configMapKeyRef:
+                    name: init-wait-demo-cm
+                    key: MON-CONTAINER
+              - name: MON_NS
+                valueFrom:
+                  configMapKeyRef:
+                    name: init-wait-demo-cm
+                    key: MON-NS
+            resources: 
+              limits:
+                memory: 50Mi
+              requests:
+                cpu: 50m
+                memory: 50Mi
+            volumeMounts:
+              - name: init-config-vol
+                mountPath: /init-config/init-entrypoint.sh
+                subPath: init-entrypoint.sh
+          containers:
+          - image: 'image-registry.openshift-image-registry.svc:5000/openshift/httpd:latest'
+            name: web-app
+            ports:
+            - containerPort: 8080
+              protocol: TCP
+            - containerPort: 8443
+              protocol: TCP
+            resources: 
+              limits:
+                memory: 50Mi
+              requests:
+                cpu: 50m
+                memory: 50Mi
+          volumes:
+            - name: init-config-vol
+              configMap:
+                name: init-wait-demo-cm
+parameters:
+- description: Namespace name
+  name: NAMESPACE
+  required: true
+  value: "init-wait-demo"
+- description: Wait timeout
+  name: WAIT_TIMEOUT
+  required: true
+  value: "1"
+- description: App base name to monitor
+  name: MON_APP
+  required: true
+  value: "dependency-daemon"
+- description: Container name to monitor
+  name: MON_CONTAINER
+  required: true
+  value: "dependency"
+labels:
+  app: init-wait-demo
