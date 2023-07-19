@@ -40,3 +40,8 @@ Use the following command to install and use the openshift template:
 oc apply -f init-wait-demo-template.yaml -n openshift
 oc process init-wait-demo-template -n openshift | oc apply -f -
 ```
+
+
+# Reference
+[1] https://kubernetes.io/docs/concepts/overview/kubernetes-api/
+[2] https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/
