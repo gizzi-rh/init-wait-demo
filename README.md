@@ -1,11 +1,13 @@
 # Description
 
-This is a simple demo to show a workload app container can be created after a dependency pod is ready. The demo covers the particular case where the dependency is not a very strict dependency. Therefore, there is a timeout and if it expires then the workload container is created even if the dependency pod is not ready yet.
+This is a simple demo to show how a workload app container can be created after a dependency pod is ready. The demo covers the particular case where the dependency is not a very strict dependency. Therefore, there is a timeout and if it expires then the workload container is created even if the dependency pod is not ready yet.
 
 The demo is implemented in three ways:
 - Helm Chart
 - List object that defines: namespace, daemonset, deployment, configmap, service account, role binding
 - Openshift template object defining the same resources as List object
+
+**Note:** The demo has been developed for an OCP cluster with 3 worker nodes
 
 
 # Helm Chart
